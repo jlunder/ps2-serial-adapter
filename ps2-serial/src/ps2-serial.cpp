@@ -1,10 +1,11 @@
 #include <Arduino.h>
-#include <PS2X_lib.h>
+#include <PS2X.h>
 
 uint32_t const pollMs = 20;
 uint32_t lastTick;
 
 PS2X ps2x; // create PS2 Controller Class
+//SoftwareSerial outSerial(0, 1);
 
 void setup()
 {
@@ -12,12 +13,13 @@ void setup()
   Serial.println("Initializing");
   lastTick = millis();
 
-  int error = ps2x.config_gamepad(13, 11, 10, 12, true, false);
-  Serial.print("  config_gamepad returns ");
-  Serial.println(error, DEC);
-
   pinMode(2, OUTPUT);
   pinMode(3, OUTPUT);
+
+  ps2x.begin(10, true, false);
+  Serial.print("  Gamepad status = ");
+  Serial.println(ps2x.getStatus(), DEC);
+  ps2x.end();
 }
 
 void loop()
@@ -37,13 +39,24 @@ void loop()
 
   digitalWrite(2, 1);
   digitalWrite(3, 1);
-  ps2x.read_gamepad();
+  ps2x.readGamepad();
   digitalWrite(3, 0);
-  Serial.write((uint8_t)0x92);
-  Serial.write((uint8_t)((ps2x.ButtonDataByte() >> 0) & 0x0F));
-  Serial.write((uint8_t)((ps2x.ButtonDataByte() >> 4) & 0x0F));
-  Serial.write((uint8_t)((ps2x.ButtonDataByte() >> 8) & 0x0F));
-  Serial.write((uint8_t)((ps2x.ButtonDataByte() >> 12) & 0x0F));
+
+  Serial.print(ps2x.getAnalog(PSS_LX), HEX);
+  Serial.print(' ');
+  Serial.print(ps2x.getAnalog(PSS_LY), HEX);
+  Serial.print(' ');
+  Serial.print(ps2x.getAnalog(PSAB_SQUARE), HEX);
+  Serial.print(' ');
+  Serial.print(ps2x.getAnalog(PSAB_CROSS), HEX);
+  Serial.print(' ');
+  Serial.println(ps2x.getButtons(), BIN);
+  /*
+  Serial.write((uint8_t)0x81);
+  Serial.write((uint8_t)((ps2x.getButtons() >> 0) & 0x0F));
+  Serial.write((uint8_t)((ps2x.getButtons() >> 4) & 0x0F));
+  Serial.write((uint8_t)((ps2x.getButtons() >> 8) & 0x0F));
+  Serial.write((uint8_t)((ps2x.getButtons() >> 12) & 0x0F));
   Serial.write((uint8_t)ps2x.Analog(PSS_RX) >> 1);
   Serial.write((uint8_t)ps2x.Analog(PSS_RY) >> 1);
   Serial.write((uint8_t)ps2x.Analog(PSS_LX) >> 1);
@@ -60,5 +73,6 @@ void loop()
   Serial.write((uint8_t)ps2x.Analog(PSAB_R1) >> 1);
   Serial.write((uint8_t)ps2x.Analog(PSAB_L2) >> 1);
   Serial.write((uint8_t)ps2x.Analog(PSAB_R2) >> 1);
+  */
   digitalWrite(2, 0);
 }
