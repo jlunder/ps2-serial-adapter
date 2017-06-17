@@ -100,7 +100,7 @@ public:
     bool usePressure = false, bool useRumble = false);
   void end();
   void poll();
-  void poll(bool motor1, uint8_t motor2);
+  void poll(bool rumbleMotor0, uint8_t rumbleMotor1);
 
 private:
   uint8_t _attentionPin;
@@ -115,7 +115,7 @@ private:
   uint8_t _status;
 
   void configureGamepad();
-  void readGamepad(bool motor1, uint8_t motor2);
+  void readGamepad(bool rumbleMotor0, uint8_t rumbleMotor1);
   bool setConfigMode(bool configMode);
   bool setAnalogMode(bool analogMode, bool locked);
   bool setMotorMap();

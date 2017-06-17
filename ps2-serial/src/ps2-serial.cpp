@@ -2,14 +2,16 @@
 #include <PSGamepad.h>
 
 
+#define PSG_ATTENTION_PIN 10
+
+
 enum ParserState {
   PS_IDLE,
-  PS_MODE_CHANGE,
-};
-
-enum Mode {
-  M_MANUAL_POLL,
-  M_AUTOMATIC_POLL,
+  PS_AUTO_PARAM,
+  PS_MODE_PARAM,
+  PS_RUMBLE_PARAM_0,
+  PS_RUMBLE_PARAM_1,
+  PS_RUMBLE_PARAM_2,
 };
 
 
@@ -29,14 +31,25 @@ uint32_t lastReadDuration;
 uint32_t lastLoopDuration;
 
 ParserState parserState = PS_IDLE;
-Mode mode = M_MANUAL_POLL;
+bool autoPoll = false;
+bool useAnalog = true;
+bool usePressure = false;
+bool rumbleMotor0Staging = false;
+bool rumbleMotor0 = false;
+uint8_t rumbleMotor1Staging = 0;
+uint8_t rumbleMotor1 = 0;
+
+bool doPrint;
+bool doReset;
 
 
 void pollGamepad();
 void executeCommands();
+void parseCommand(uint8_t command);
+void parseIdleCommand(uint8_t command);
+void parseModeParam(uint8_t command);
+uint8_t parseHexDigit(uint8_t digit);
 void printGamepadValues();
-void resetGamepad();
-void setupGamepad();
 char * printHexUint32(char * p, uint32_t val);
 char * printHexUint16(char * p, uint16_t val);
 char * printHexUint8(char * p, uint8_t val);
@@ -44,7 +57,6 @@ char * printHexUint8(char * p, uint8_t val);
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("RESET");
 
   pinMode(2, OUTPUT);
   pinMode(3, OUTPUT);
@@ -52,9 +64,8 @@ void setup() {
   pinMode(5, OUTPUT);
   pinMode(6, OUTPUT);
 
-  setupGamepad();
-
   lastMicros = micros();
+  psg.begin(PSG_ATTENTION_PIN, useAnalog, usePressure, true);
 }
 
 
@@ -85,7 +96,7 @@ void loop() {
 void pollGamepad() {
   digitalWrite(3, 1);
   lastReadMicros = micros();
-  psg.poll();
+  psg.poll(rumbleMotor0, rumbleMotor1);
   lastReadDuration = micros() - lastReadMicros;
   digitalWrite(3, 0);
 }
@@ -93,48 +104,133 @@ void pollGamepad() {
 
 void executeCommands() {
   digitalWrite(4, 1);
-  bool doPrint = false;
-  bool doReset = false;
+  doPrint = false;
+  doReset = false;
 
   while(Serial.available()) {
-    int command = Serial.read();
-    if(parserState == PS_MODE_CHANGE) {
-      switch(command) {
-        case '0':
-          mode = M_MANUAL_POLL;
-          break;
-        case '1':
-          mode = M_AUTOMATIC_POLL;
-          break;
-      }
-      parserState = PS_IDLE;
-    } else {
-      switch(command) {
-        case 'p': case 'P':
-          doPrint = true;
-          break;
-        case 'm': case 'M':
-          parserState = PS_MODE_CHANGE;
-          mode = M_MANUAL_POLL;
-          break;
-        case 'r': case 'R':
-          doReset = true;
-        default:
-          break;
-      }
-    }
+    parseCommand(Serial.read());
   }
   digitalWrite(4, 0);
 
   digitalWrite(5, 1);
   if(doReset) {
-    resetGamepad();
+    psg.end();
+    psg.begin(PSG_ATTENTION_PIN, useAnalog, usePressure, true);
   } else {
-    if(doPrint || mode == M_AUTOMATIC_POLL) {
+    if(doPrint || autoPoll) {
       printGamepadValues();
     }
   }
   digitalWrite(5, 0);
+}
+
+
+void parseCommand(uint8_t command) {
+  switch(parserState) {
+    case PS_IDLE:
+      parseIdleCommand(command);
+      break;
+    case PS_AUTO_PARAM:
+      if(command == '1') {
+        autoPoll = true;
+      }
+      parserState = PS_IDLE;
+      break;
+    case PS_MODE_PARAM:
+      parseModeParam(command);
+      parserState = PS_IDLE;
+      break;
+    case PS_RUMBLE_PARAM_0:
+      if(command == '\n') {
+        parserState = PS_IDLE;
+      } else {
+        rumbleMotor0Staging = (command == '1');
+        parserState = PS_RUMBLE_PARAM_1;
+      }
+      break;
+    case PS_RUMBLE_PARAM_1:
+      if(command == '\n') {
+        parserState = PS_IDLE;
+      } else {
+        rumbleMotor1Staging |= parseHexDigit(command) << 4;
+        parserState = PS_RUMBLE_PARAM_2;
+      }
+      break;
+    case PS_RUMBLE_PARAM_2:
+      if(command == '\n') {
+        parserState = PS_IDLE;
+      } else {
+        rumbleMotor1Staging |= parseHexDigit(command) << 0;
+        rumbleMotor0 = rumbleMotor0Staging;
+        rumbleMotor1 = rumbleMotor1Staging;
+        parserState = PS_IDLE;
+      }
+      break;
+    default:
+      parserState = PS_IDLE;
+      break;
+  }
+}
+
+
+void parseIdleCommand(uint8_t command) {
+  switch(command) {
+    case 'a': case 'A':
+      parserState = PS_AUTO_PARAM;
+      autoPoll = false;
+      break;
+    case 'm': case 'M':
+      parserState = PS_MODE_PARAM;
+      break;
+    case 'p': case 'P':
+      doPrint = true;
+      break;
+    case 'r': case 'R':
+      doReset = true;
+      break;
+    case 'v': case 'V':
+      parserState = PS_RUMBLE_PARAM_0;
+      rumbleMotor0Staging = false;
+      rumbleMotor1Staging = 0;
+      break;
+    default:
+      break;
+  }
+}
+
+
+void parseModeParam(uint8_t command) {
+  switch(command) {
+    default:
+    case '0':
+      doReset = true;
+      useAnalog = false;
+      usePressure = false;
+      break;
+    case '1':
+      doReset = true;
+      useAnalog = true;
+      usePressure = false;
+      break;
+    case '2':
+      doReset = true;
+      useAnalog = true;
+      usePressure = true;
+      break;
+  }
+}
+
+
+uint8_t parseHexDigit(uint8_t digit) {
+  if(digit >= '0' && digit <= '9') {
+    return digit - '0';
+  } else if(digit >= 'A' && digit <= 'F') {
+    return digit - 'A' + 10;
+  } else if(digit >= 'a' && digit <= 'f') {
+    return digit - 'a' + 10;
+  } else {
+    return 0;
+  }
 }
 
 
@@ -152,31 +248,30 @@ void printGamepadValues() {
   p = printHexUint16(p, lastLoopDuration);
 #endif
   *(p++) = ':';
+  uint8_t status = psg.getStatus();
+  p = printHexUint8(p, status);
+  *(p++) = ':';
   p = printHexUint16(p, psg.getButtons());
-  *(p++) = '/';
-  p = printHexUint8(p, psg.getAnalog(PSS_LX));
-  *(p++) = ',';
-  p = printHexUint8(p, psg.getAnalog(PSS_LY));
-  *(p++) = ';';
-  p = printHexUint8(p, psg.getAnalog(PSS_RX));
-  *(p++) = ',';
-  p = printHexUint8(p, psg.getAnalog(PSS_RY));
-  //*(p++) = '/';
+  if(status == PSCS_ANALOG || status == PSCS_PRESSURE) {
+    *(p++) = '/';
+    p = printHexUint8(p, psg.getAnalog(PSS_LX));
+    *(p++) = ',';
+    p = printHexUint8(p, psg.getAnalog(PSS_LY));
+    *(p++) = ';';
+    p = printHexUint8(p, psg.getAnalog(PSS_RX));
+    *(p++) = ',';
+    p = printHexUint8(p, psg.getAnalog(PSS_RY));
+  }
+  if(status == PSCS_PRESSURE) {
+    *(p++) = '/';
+    p = printHexUint8(p, psg.getAnalog(PSAB_PAD_RIGHT));
+    for(uint8_t i = 1; i < 12; ++i) {
+      *(p++) = ',';
+      p = printHexUint8(p, psg.getAnalog(i + PSAB_PAD_RIGHT));
+    }
+  }
   *(p++) = 0;
   Serial.println(temp);
-}
-
-
-void resetGamepad() {
-  psg.end();
-  setupGamepad();
-}
-
-
-void setupGamepad() {
-  psg.begin(10, true, false);
-  Serial.print("R ");
-  Serial.println(psg.getStatus(), DEC);
 }
 
 

@@ -45,7 +45,7 @@ void PSGamepad::poll() {
 }
 
 
-void PSGamepad::poll(bool motor1, uint8_t motor2) {
+void PSGamepad::poll(bool rumbleMotor0, uint8_t rumbleMotor1) {
   uint32_t deltaMillis = millis() - _lastReadMillis;
 
   if(deltaMillis < 7) {
@@ -56,7 +56,7 @@ void PSGamepad::poll(bool motor1, uint8_t motor2) {
   if(_status == PSCS_DISCONNECTED || deltaMillis > 1000) {
     configureGamepad();
   } else {
-    readGamepad(motor1, motor2);
+    readGamepad(rumbleMotor0, rumbleMotor1);
   }
 
   if(_status == PSCS_CONFIGURING) {
@@ -104,7 +104,7 @@ void PSGamepad::configureGamepad() {
 }
 
 
-void PSGamepad::readGamepad(bool motor1, uint8_t motor2) {
+void PSGamepad::readGamepad(bool rumbleMotor0, uint8_t rumbleMotor1) {
   uint8_t rxData[18];
   uint8_t result;
 
@@ -112,7 +112,9 @@ void PSGamepad::readGamepad(bool motor1, uint8_t motor2) {
     result = sendCommand(PSC_SET_CONFIG_MODE, NULL, 0, 0x00,
       rxData, sizeof rxData);
   } else {
-    uint8_t txData[2] = { (uint8_t)(motor1 ? 0xFF : 0x00), motor2 };
+    uint8_t txData[2] = {
+      (uint8_t)(rumbleMotor0 ? 0xFF : 0x00), rumbleMotor1
+    };
     result = sendCommand(PSC_GET_CONTROLS, txData, 2, 0x00,
       rxData, sizeof rxData);
   }
