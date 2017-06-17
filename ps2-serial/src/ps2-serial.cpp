@@ -21,7 +21,7 @@ char const hexDigits[16] = {
 };
 
 
-uint32_t const pollMicros = 20000;
+uint32_t const pollMicros = 10000;
 uint32_t lastMicros;
 
 PSGamepad psg;
@@ -131,9 +131,7 @@ void parseCommand(uint8_t command) {
       parseIdleCommand(command);
       break;
     case PS_AUTO_PARAM:
-      if(command == '1') {
-        autoPoll = true;
-      }
+      autoPoll = (command == '1');
       parserState = PS_IDLE;
       break;
     case PS_MODE_PARAM:
