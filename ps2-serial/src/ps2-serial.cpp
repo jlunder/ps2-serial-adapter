@@ -62,7 +62,11 @@ void setup() {
   pinMode(3, OUTPUT);
   pinMode(4, OUTPUT);
   pinMode(5, OUTPUT);
-  pinMode(6, OUTPUT);
+
+  pinMode(6, INPUT_PULLUP);
+  pinMode(7, INPUT_PULLUP);
+  pinMode(8, INPUT_PULLUP);
+  pinMode(9, INPUT_PULLUP);
 
   lastMicros = micros();
   psg.begin(PSG_ATTENTION_PIN, useAnalog, usePressure, true);
@@ -114,6 +118,9 @@ void executeCommands() {
 
   digitalWrite(5, 1);
   if(doReset) {
+    autoPoll = false;
+    rumbleMotor0 = false;
+    rumbleMotor1 = 0;
     psg.end();
     psg.begin(PSG_ATTENTION_PIN, useAnalog, usePressure, true);
   } else {
@@ -235,7 +242,19 @@ uint8_t parseHexDigit(uint8_t digit) {
 void printGamepadValues() {
   char temp[100];
   char * p = temp;
-
+  uint16_t extraButtons = 0;
+  if(!digitalRead(6)) {
+    extraButtons |= PSB_GREEN;
+  }
+  if(!digitalRead(7)) {
+    extraButtons |= PSB_RED;
+  }
+  if(!digitalRead(8)) {
+    extraButtons |= PSB_BLUE;
+  }
+  if(!digitalRead(9)) {
+    extraButtons |= PSB_PINK;
+  }
   *(p++) = 'P';
   *(p++) = ' ';
   p = printHexUint32(p, lastReadMicros);
@@ -249,7 +268,7 @@ void printGamepadValues() {
   uint8_t status = psg.getStatus();
   p = printHexUint8(p, status);
   *(p++) = ':';
-  p = printHexUint16(p, psg.getButtons());
+  p = printHexUint16(p, psg.getButtons() & ~extraButtons);
   if(status == PSCS_ANALOG || status == PSCS_PRESSURE) {
     *(p++) = '/';
     p = printHexUint8(p, psg.getAnalog(PSS_LX));
